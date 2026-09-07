@@ -17,6 +17,8 @@ from jobs.serializers import (
 )
 from users.models import UserRole
 
+from django.core.cache import cache
+
 class CategoryViewSet(viewsets.ModelViewSet):
     queryset = Category.objects.all()
     serializer_class = CategorySerializer
@@ -24,6 +26,28 @@ class CategoryViewSet(viewsets.ModelViewSet):
     filter_backends = (filters.SearchFilter, filters.OrderingFilter)
     search_fields = ('name', 'description')
     ordering_fields = ('name', 'created_at')
+
+    def list(self, request, *args, **kwargs):
+        cache_key = 'category_list'
+        cached_data = cache.get(cache_key)
+        if cached_data is not None:
+            return Response(cached_data)
+
+        response = super().list(request, *args, **kwargs)
+        cache.set(cache_key, response.data, timeout=300)
+        return response
+
+    def perform_create(self, serializer):
+        serializer.save()
+        cache.delete('category_list')
+
+    def perform_update(self, serializer):
+        serializer.save()
+        cache.delete('category_list')
+
+    def perform_destroy(self, instance):
+        instance.delete()
+        cache.delete('category_list')
 
 class JobViewSet(viewsets.ModelViewSet):
     permission_classes = (IsAuthenticated,)
