@@ -72,6 +72,18 @@ class Job(models.Model):
             models.Index(fields=['assignee', 'status']),
         ]
 
+    def clean(self):
+        super().clean()
+        if self.pk:
+            old_instance = Job.objects.filter(pk=self.pk).first()
+            if old_instance and old_instance.status != self.status:
+                from jobs.services.state_machine import JobStateMachine
+                JobStateMachine.validate_transition(old_instance.status, self.status)
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        super().save(*args, **kwargs)
+
     def __str__(self):
         return f"{self.title} [{self.status}]"
 
