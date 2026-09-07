@@ -50,12 +50,25 @@ class CategoryViewSet(viewsets.ModelViewSet):
         instance.delete()
         cache.delete(CacheKeys.get_category_list_key())
 
+from jobs.tasks import send_job_assignment_notification_task
+
 class JobViewSet(viewsets.ModelViewSet):
     permission_classes = (IsAuthenticated,)
     filter_backends = (DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter)
     filterset_class = JobFilter
     search_fields = ('title', 'description')
     ordering_fields = ('created_at', 'due_date', 'priority', 'status')
+
+    def perform_create(self, serializer):
+        job = serializer.save()
+        if job.assignee_id:
+            send_job_assignment_notification_task.delay(job.id)
+
+    def perform_update(self, serializer):
+        old_assignee_id = serializer.instance.assignee_id
+        job = serializer.save()
+        if job.assignee_id and job.assignee_id != old_assignee_id:
+            send_job_assignment_notification_task.delay(job.id)
 
     def get_queryset(self):
         user = self.request.user
