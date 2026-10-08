@@ -89,6 +89,22 @@ class JobCreateUpdateSerializer(serializers.ModelSerializer):
         validated_data['creator'] = self.context['request'].user
         return super().create(validated_data)
 
+    def update(self, instance, validated_data):
+        old_status = instance.status
+        new_status = validated_data.get('status', old_status)
+        if new_status != old_status:
+            JobStateMachine.validate_transition(old_status, new_status)
+        updated_job = super().update(instance, validated_data)
+        if new_status != old_status:
+            JobActivityLog.objects.create(
+                job=updated_job,
+                actor=self.context['request'].user,
+                action=f"Status changed from {old_status} to {new_status}",
+                old_status=old_status,
+                new_status=new_status,
+            )
+        return updated_job
+
 class JobStatusUpdateSerializer(serializers.Serializer):
     status = serializers.ChoiceField(choices=JobStatus.choices)
     action_note = serializers.CharField(required=False, allow_blank=True, default='')
